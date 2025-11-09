@@ -1,82 +1,178 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
-  <head>
-    <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover"
-    />
-    <title>Auth Relay · SugarPaw</title>
-    <meta name="robots" content="noindex,nofollow" />
-    <style>
-      body {
-        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-          "Noto Sans", "Helvetica Neue", Arial, "Apple Color Emoji",
-          "Segoe UI Emoji";
-        background: #fff8f3;
-        color: #333;
-        margin: 0;
-        display: grid;
-        place-items: center;
-        height: 100vh;
-      }
-      .card {
-        background: #fff;
-        border: 1px solid #eee;
-        border-radius: 16px;
-        padding: 20px 24px;
-        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.06);
-        text-align: center;
-      }
-      .muted {
-        color: #888;
-        font-size: 12px;
-        margin-top: 8px;
-      }
-      code {
-        background: #f6f6f6;
-        padding: 2px 6px;
-        border-radius: 6px;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="card">
-      <div>正在安全轉跳中…</div>
-      <div class="muted">若未自動跳轉，請稍候或手動返回 App</div>
-      <div class="muted">
-        <code>/auth/relay</code> → <code>/auth/callback</code>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Auth Relay · SugarPaw</title>
+
+  <!-- 基本 SEO：避免被索引 -->
+  <meta name="robots" content="noindex,nofollow" />
+  <meta name="referrer" content="no-referrer" />
+
+  <!-- PWA / iOS 視覺友善 -->
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#fff8f3" />
+
+  <style>
+    :root { --bg:#fff8f3; --card:#fff; --text:#333; --muted:#7a7a7a; --amber:#f59e0b; }
+    @media (prefers-color-scheme: dark){
+      :root { --bg:#141414; --card:#1b1b1b; --text:#eee; --muted:#a6a6a6; }
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; display: grid; place-items: center; height: 100%;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans",
+        "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background: var(--bg); color: var(--text);
+    }
+    .card {
+      width: min(640px, 92vw); background: var(--card);
+      border: 1px solid color-mix(in oklab, var(--muted) 30%, transparent);
+      border-radius: 16px; padding: 20px 22px;
+      box-shadow: 0 6px 24px rgba(0,0,0,.08);
+      text-align: center;
+    }
+    h1 { font-size: 18px; margin: 4px 0 8px; }
+    p  { margin: 6px 0; color: var(--muted); font-size: 13px; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: color-mix(in oklab, var(--card) 60%, #000 6%);
+      padding: 2px 6px; border-radius: 6px;
+    }
+    .row { margin-top: 8px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      appearance: none; border: 1px solid color-mix(in oklab, var(--muted) 30%, transparent);
+      background: var(--card); color: var(--text); padding: 8px 12px; border-radius: 10px;
+      cursor: pointer; font-size: 14px;
+    }
+    .btn.primary {
+      background: var(--amber); color: #fff; border-color: transparent;
+    }
+    .muted { color: var(--muted); font-size: 12px; }
+    .hide { display: none !important; }
+    .debug { text-align: left; margin-top: 10px; padding: 10px; font-size: 12px;
+      background: color-mix(in oklab, var(--card) 60%, #000 10%); border-radius: 10px; }
+    .kv { display: grid; grid-template-columns: 120px 1fr; gap: 6px 10px; }
+  </style>
+</head>
+<body>
+  <div class="card" role="status" aria-live="polite">
+    <h1 id="title">正在安全轉跳中…</h1>
+    <p id="subtitle">若未自動跳轉，請稍候或點下方按鈕回到 App</p>
+    <p class="muted"><code>/auth/relay</code> → <code>/auth/callback</code></p>
+    <div class="row">
+      <a id="manualLink" class="btn primary" href="#" rel="noreferrer">手動返回 SugarPaw</a>
+      <button id="retry" class="btn">重試</button>
+    </div>
+    <div id="debugBox" class="debug hide">
+      <div class="kv">
+        <div>targetOrigin</div><div id="dbg-origin"></div>
+        <div>next</div><div id="dbg-next"></div>
+        <div>search</div><div id="dbg-search"></div>
+        <div>hash</div><div id="dbg-hash"></div>
+        <div>target</div><div id="dbg-target"></div>
       </div>
     </div>
+    <p id="fallback" class="muted hide">10 秒未成功將自動改用備援方式導回主站…</p>
+  </div>
 
-    <script>
-      (function () {
-        // 👉 改成你的主站網址（能處理 /auth/callback 的那個）
-        // 例：Vercel Web 站 https://sugar-paw.vercel.app 或你的自訂網域
-        const MAIN_ORIGIN = "https://sugar-paw.vercel.app";
+  <script>
+    (function () {
+      /** ----------- 可調整區域（請按需修改） ----------- */
+      // 你的主站（處理 /auth/callback 的地方）
+      const MAIN_ORIGIN = "https://sugar-paw.vercel.app";
 
-        // 允許以查詢參數覆蓋（可選）：?origin=https://your-site.app
-        const url = new URL(window.location.href);
-        const overrideOrigin = url.searchParams.get("origin");
-        const targetOrigin = overrideOrigin || MAIN_ORIGIN;
+      // 允許覆蓋的安全來源白名單（例如將來自訂網域）
+      const ALLOWLIST = [
+        "https://sugar-paw.vercel.app",
+        // "https://your.custom.domain",  // ← 上線後把你的自訂網域加進來
+      ];
 
-        // 把 Supabase 附帶的 query（含 type=recovery & next）與 #hash token 一起帶回主站
-        const search = window.location.search || "";
-        const hash = window.location.hash || "";
+      // 可傳入 ?origin=xxx 覆蓋 MAIN_ORIGIN；若不在白名單，會回退 MAIN_ORIGIN
+      const url = new URL(window.location.href);
+      const overrideOrigin = url.searchParams.get("origin");
+      const debug = url.searchParams.get("debug") === "1";
 
-        // 目標：主站 /auth/callback?type=...&next=...#access_token=...
-        const target = `${targetOrigin.replace(
-          /\/+$/,
-          ""
-        )}/auth/callback${search}${hash}`;
-
-        // 使用 replace 不留中繼在瀏覽紀錄
+      function inAllowlist(origin) {
         try {
-          window.location.replace(target);
-        } catch {
-          window.location.href = target;
-        }
-      })();
-    </script>
-  </body>
+          const o = new URL(origin).origin;
+          return ALLOWLIST.includes(o);
+        } catch { return false; }
+      }
+
+      // 僅允許相對路徑的 next（避免打開到第三方）
+      function sanitizeNext(n) {
+        if (!n || typeof n !== "string") return "/reset-password";
+        // 拒絕以 http/https 開頭的絕對網址
+        if (/^https?:\/\//i.test(n)) return "/reset-password";
+        // 確保以 / 開頭，避免相對到 /auth/relay 目錄
+        if (!n.startsWith("/")) return "/reset-password";
+        // 可在此加入更細緻的白名單，例如僅允許這幾個頁面
+        // const allowed = ["/reset-password", "/login", "/auth/callback"];
+        // if (!allowed.includes(n.split("?")[0])) return "/reset-password";
+        return n;
+      }
+
+      // 取出 Supabase 帶來的 query 與 hash
+      const search = window.location.search || ""; // 包含 ?type=recovery&next=...
+      const hash   = window.location.hash || "";   // 包含 #access_token=...
+
+      // 解析 next 的值（若沒有就預設回 reset）
+      const qp = new URLSearchParams(search);
+      const rawNext = qp.get("next") || "/reset-password";
+      const nextSafe = sanitizeNext(rawNext);
+
+      // 決定最終目標 origin
+      const targetOrigin = (overrideOrigin && inAllowlist(overrideOrigin)) ? overrideOrigin : MAIN_ORIGIN;
+
+      // 組合最終跳轉網址
+      const target = `${targetOrigin.replace(/\/+$/, "")}/auth/callback?` +
+        (() => {
+          const q = new URLSearchParams(search);
+          q.set("next", nextSafe);
+          return q.toString();
+        })() + (hash || "");
+
+      // UI 元素
+      const elManual = document.getElementById("manualLink");
+      const elRetry  = document.getElementById("retry");
+      const elDbgBox = document.getElementById("debugBox");
+      const elFallback = document.getElementById("fallback");
+      const fill = (id, v) => { const n = document.getElementById(id); if (n) n.textContent = v; };
+
+      // Debug 顯示
+      if (debug) {
+        elDbgBox.classList.remove("hide");
+        fill("dbg-origin", targetOrigin);
+        fill("dbg-next", nextSafe);
+        fill("dbg-search", search);
+        fill("dbg-hash", hash);
+        fill("dbg-target", target);
+      }
+
+      // 設定手動返回連結與重試行為
+      elManual.setAttribute("href", target);
+      elManual.addEventListener("click", () => { /* 預設讓瀏覽器導向 */ });
+      elRetry.addEventListener("click", () => {
+        try { window.location.replace(target); } catch { window.location.href = target; }
+      });
+
+      // 3 段式導轉：replace → assign → href（保險）
+      try {
+        window.location.replace(target);
+      } catch {
+        try { window.location.assign(target); }
+        catch { window.location.href = target; }
+      }
+
+      // 10 秒備援提示（若還沒成功）
+      setTimeout(() => {
+        elFallback.classList.remove("hide");
+        // 再嘗試一次（某些 WebView 初次注入失敗）
+        try { window.location.replace(target); } catch { window.location.href = target; }
+      }, 10000);
+    })();
+  </script>
+</body>
 </html>
