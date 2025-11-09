@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Auth Relay · SugarPaw</title>
+    <meta name="robots" content="noindex,nofollow" />
+    <style>
+      body {
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+          "Noto Sans", "Helvetica Neue", Arial, "Apple Color Emoji",
+          "Segoe UI Emoji";
+        background: #fff8f3;
+        color: #333;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        height: 100vh;
+      }
+      .card {
+        background: #fff;
+        border: 1px solid #eee;
+        border-radius: 16px;
+        padding: 20px 24px;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.06);
+        text-align: center;
+      }
+      .muted {
+        color: #888;
+        font-size: 12px;
+        margin-top: 8px;
+      }
+      code {
+        background: #f6f6f6;
+        padding: 2px 6px;
+        border-radius: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div>正在安全轉跳中…</div>
+      <div class="muted">若未自動跳轉，請稍候或手動返回 App</div>
+      <div class="muted">
+        <code>/auth/relay</code> → <code>/auth/callback</code>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        // 👉 改成你的主站網址（能處理 /auth/callback 的那個）
+        // 例：Vercel Web 站 https://sugar-paw.vercel.app 或你的自訂網域
+        const MAIN_ORIGIN = "https://sugar-paw.vercel.app";
+
+        // 允許以查詢參數覆蓋（可選）：?origin=https://your-site.app
+        const url = new URL(window.location.href);
+        const overrideOrigin = url.searchParams.get("origin");
+        const targetOrigin = overrideOrigin || MAIN_ORIGIN;
+
+        // 把 Supabase 附帶的 query（含 type=recovery & next）與 #hash token 一起帶回主站
+        const search = window.location.search || "";
+        const hash = window.location.hash || "";
+
+        // 目標：主站 /auth/callback?type=...&next=...#access_token=...
+        const target = `${targetOrigin.replace(
+          /\/+$/,
+          ""
+        )}/auth/callback${search}${hash}`;
+
+        // 使用 replace 不留中繼在瀏覽紀錄
+        try {
+          window.location.replace(target);
+        } catch {
+          window.location.href = target;
+        }
+      })();
+    </script>
+  </body>
+</html>
