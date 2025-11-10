@@ -2,33 +2,80 @@
 <html lang="zh-Hant">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
     <title>Auth Relay · SugarPaw</title>
     <meta name="robots" content="noindex,nofollow" />
     <style>
-      :root { --bg:#fff8f3; --card:#fff; --muted:#888; }
-      html,body { height:100%; }
+      :root {
+        --bg: #fff8f3;
+        --card: #fff;
+        --muted: #888;
+      }
+      html,
       body {
-        margin:0; display:grid; place-items:center; height:100%;
-        background:var(--bg); color:#333;
-        font-family: ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans","Helvetica Neue",Arial,"Apple Color Emoji","Segoe UI Emoji";
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        display: grid;
+        place-items: center;
+        height: 100%;
+        background: var(--bg);
+        color: #333;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+          "Noto Sans", "Helvetica Neue", Arial, "Apple Color Emoji",
+          "Segoe UI Emoji";
       }
       .card {
-        background:var(--card); border:1px solid #eee; border-radius:16px;
-        padding:20px 24px; box-shadow:0 6px 24px rgba(0,0,0,.06); text-align:left; width:min(680px, 92vw);
+        background: var(--card);
+        border: 1px solid #eee;
+        border-radius: 16px;
+        padding: 20px 24px;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.06);
+        text-align: left;
+        width: min(680px, 92vw);
       }
-      .row { display:flex; gap:8px; align-items:center; justify-content:space-between; }
-      .muted { color:var(--muted); font-size:12px; }
-      code { background:#f6f6f6; padding:2px 6px; border-radius:6px; }
-      .kv { margin:8px 0; }
-      .kv dt { font-size:12px; color:#666; }
-      .kv dd { margin:2px 0 10px; word-break:break-all; }
-      .hide { display:none; }
-      .ok { color:#10b981; font-weight:600; }
+      .row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .muted {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      code {
+        background: #f6f6f6;
+        padding: 2px 6px;
+        border-radius: 6px;
+      }
+      .kv {
+        margin: 8px 0;
+      }
+      .kv dt {
+        font-size: 12px;
+        color: #666;
+      }
+      .kv dd {
+        margin: 2px 0 10px;
+        word-break: break-all;
+      }
+      .hide {
+        display: none;
+      }
+      .ok {
+        color: #10b981;
+        font-weight: 600;
+      }
     </style>
   </head>
   <body>
-    <div class="card" id="panel" class="hide">
+    <!-- 修正：合併成 class="card hide" -->
+    <div id="panel" class="card hide">
       <div class="row">
         <div><strong>正在安全轉跳中…</strong></div>
         <div class="muted" id="timerText">即將跳轉</div>
@@ -51,51 +98,80 @@
     <script>
       (function () {
         // 你的主站（處理 /auth/callback 的站點）
-        const DEFAULT_ORIGIN = "https://sugar-paw.vercel.app";
+        var DEFAULT_ORIGIN = "https://sugar-paw.vercel.app";
 
-        // 解析參數
-        const url = new URL(window.location.href);
-        const origin = (url.searchParams.get("origin") || DEFAULT_ORIGIN).replace(/\/+$/, "");
-        const search = window.location.search || "";
-        const hash = window.location.hash || "";
-        const target = `${origin}/auth/callback${search}${hash}`;
+        var loc = window.location;
+        var url = new URL(loc.href);
+        var origin = (url.searchParams.get("origin") || DEFAULT_ORIGIN).replace(
+          /\/+$/,
+          ""
+        );
 
-        // Debug 開關與延遲（只有 ?debug=1 時才會啟用）
-        const DEBUG = url.searchParams.get("debug") === "1";
-        const DEBUG_DELAY_MS = 3000;
+        // 預設: recovery → /reset-password
+        var type = url.searchParams.get("type") || "recovery";
+        var next = url.searchParams.get("next") || "/reset-password";
 
-        // 更新 UI
-        const $ = (id) => document.getElementById(id);
-        $("originEl").textContent = origin;
-        $("nextEl").textContent = url.searchParams.get("next") || "(無 next)";
-        $("hashEl").textContent = hash || "(無 #hash)";
-        $("targetEl").textContent = target;
+        // 將 hash 解析為查詢參數（在 relay 先升級，讓 /auth/callback 更穩）
+        var rawHash = (loc.hash || "").replace(/^#/, "");
+        var hp = new URLSearchParams(rawHash);
+        var hasToken =
+          hp.get("access_token") || hp.get("refresh_token") || hp.get("code");
+
+        // 建立 /auth/callback 目標 URL
+        var target = new URL(origin + "/auth/callback");
+        target.searchParams.set("type", type);
+        target.searchParams.set("next", next);
+
+        // 若有 token，升級成 query 帶回主站
+        if (hp.get("access_token"))
+          target.searchParams.set("access_token", hp.get("access_token"));
+        if (hp.get("refresh_token"))
+          target.searchParams.set("refresh_token", hp.get("refresh_token"));
+        if (hp.get("code")) target.searchParams.set("code", hp.get("code"));
+
+        // Debug 模式：?debug=1
+        var DEBUG = url.searchParams.get("debug") === "1";
+        var DEBUG_DELAY_MS = 3000;
+
+        // UI 更新（僅為除錯方便）
+        var $ = function (id) {
+          return document.getElementById(id);
+        };
+        if ($("originEl")) $("originEl").textContent = origin;
+        if ($("nextEl")) $("nextEl").textContent = next || "(無 next)";
+        if ($("hashEl"))
+          $("hashEl").textContent = rawHash ? "#" + rawHash : "(無 #hash)";
+        if ($("targetEl")) $("targetEl").textContent = target.toString();
+
+        function go() {
+          try {
+            window.location.replace(target.toString());
+          } catch {
+            window.location.href = target.toString();
+          }
+        }
 
         if (DEBUG) {
-          $("okMsg").classList.remove("hide");
-          let remain = Math.ceil(DEBUG_DELAY_MS / 1000);
-          $("timerText").textContent = `即將跳轉（${remain}s）`;
-          $("panel").classList.remove("hide");
+          $("okMsg") && $("okMsg").classList.remove("hide");
+          var remain = Math.ceil(DEBUG_DELAY_MS / 1000);
+          $("timerText") &&
+            ($("timerText").textContent = "即將跳轉（" + remain + "s）");
+          $("panel") && $("panel").classList.remove("hide");
 
-          const tick = setInterval(() => {
+          var tick = setInterval(function () {
             remain -= 1;
             if (remain <= 0) {
               clearInterval(tick);
-              go();
             } else {
-              $("timerText").textContent = `即將跳轉（${remain}s）`;
+              $("timerText") &&
+                ($("timerText").textContent = "即將跳轉（" + remain + "s）");
             }
           }, 1000);
 
           setTimeout(go, DEBUG_DELAY_MS);
         } else {
-          // 非 debug 直接跳
+          // 非 debug：立即跳轉
           go();
-        }
-
-        function go() {
-          try { window.location.replace(target); }
-          catch { window.location.href = target; }
         }
       })();
     </script>
