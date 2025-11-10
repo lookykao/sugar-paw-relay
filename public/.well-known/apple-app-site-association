@@ -5,7 +5,8 @@
       {
         "appID": "7Y44G8MJK2.com.niannian.sugarpaw",
         "paths": [
-          "/auth/relay*"
+          "/auth/relay",
+          "/auth/relay/*"
         ]
       }
     ]
